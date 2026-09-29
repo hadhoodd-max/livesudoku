@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sudoku</title>
+<style>
+:root{
+  --bg:#f4f6fb; --panel:#ffffff; --text:#1f2a44; --muted:#6b7794;
+  --line:#c9d1e3; --line-strong:#33415f; --given:#1f2a44; --entry:#2563eb;
+  --sel:#bfd6ff; --hl:#e6eefc; --same:#cfe0ff; --wrong-bg:#fde2e2; --wrong:#d32f2f;
+  --accent:#2563eb; --accent-text:#fff; --shadow:0 6px 24px rgba(31,42,68,.12);
+}
+:root[data-theme="dark"]{
+  --bg:#0f1422; --panel:#182036; --text:#e8ecf7; --muted:#93a0c0;
+  --line:#2c3757; --line-strong:#8fa0cc; --given:#e8ecf7; --entry:#7fb0ff;
+  --sel:#2f4a86; --hl:#1f2b49; --same:#2b4275; --wrong-bg:#4a2027; --wrong:#ff7b7b;
+  --accent:#4c8dff; --accent-text:#0b1020; --shadow:0 6px 24px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:background 150ms,color 150ms}
+.app{max-width:520px;margin:0 auto;padding:12px 12px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+h1{font-size:1.4rem;margin:0;letter-spacing:.5px}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+select,button{font:inherit;color:var(--text)}
+select{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.icon-btn{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;transition:150ms}
+.icon-btn:hover{border-color:var(--accent)}
+.stats{display:flex;justify-content:space-between;font-size:.92rem;color:var(--muted);background:var(--panel);border-radius:12px;padding:8px 12px;box-shadow:var(--shadow)}
+.stats b{color:var(--text)}
+.board-wrap{position:relative;width:min(100%,480px,58vh);margin:0 auto;aspect-ratio:1}
+.board{width:100%;height:100%;display:grid;grid-template-columns:repeat(9,1fr);border:3px solid var(--line-strong);border-radius:10px;overflow:hidden;background:var(--panel);box-shadow:var(--shadow)}
+.board.hidden .cell{color:transparent}
+.board.hidden .notes{visibility:hidden}
+.cell{position:relative;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--panel);padding:0;font-size:clamp(1rem,5.4vw,1.9rem);color:var(--entry);cursor:pointer;transition:background 150ms;display:flex;align-items:center;justify-content:center}
+.cell.bR{border-right:2px solid var(--line-strong)}
+.cell.bB{border-bottom:2px solid var(--line-strong)}
+.cell.last-c{border-right:0}
+.cell.last-r{border-bottom:0}
+.cell.given{color:var(--given);font-weight:700}
+.cell.hl{background:var(--hl)}
+.cell.same{background:var(--same)}
+.cell.sel{background:var(--sel)}
+.cell.wrong{background:var(--wrong-bg);color:var(--wrong)}
+.cell:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;z-index:2}
+.notes{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);font-size:clamp(.5rem,2.3vw,.8rem);color:var(--muted);line-height:1;pointer-events:none}
+.notes span{display:flex;align-items:center;justify-content:center}
+.pause-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:var(--panel);border-radius:10px;border:3px solid var(--line-strong);z-index:5}
+.pause-overlay.on{display:flex}
+.btn{background:var(--accent);color:var(--accent-text);border:0;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer;transition:150ms}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.actions{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.act{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 2px;cursor:pointer;font-size:.82rem;transition:150ms;display:flex;flex-direction:column;align-items:center;gap:2px;box-shadow:var(--shadow)}
+.act .ic{font-size:1.15rem}
+.act:disabled{opacity:.4;cursor:not-allowed}
+.act[aria-pressed="true"]{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.act:focus-visible,.num:focus-visible,.btn:focus-visible,.icon-btn:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.numpad{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+.num{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 0 6px;cursor:pointer;font-size:clamp(1.15rem,6vw,1.7rem);font-weight:600;color:var(--entry);display:flex;flex-direction:column;align-items:center;transition:150ms;box-shadow:var(--shadow)}
+.num small{font-size:.62rem;color:var(--muted);font-weight:500}
+.num:active{transform:scale(.95)}
+.num:disabled{opacity:.3;cursor:not-allowed}
+footer{display:flex;justify-content:center}
+.modal-bg{position:fixed;inset:0;background:rgba(10,15,30,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal-bg.on{display:flex}
+.modal{background:var(--panel);border-radius:18px;padding:22px;max-width:360px;width:100%;box-shadow:var(--shadow);text-align:center}
+.modal h2{margin:0 0 8px}
+.modal p{color:var(--muted);margin:6px 0}
+.modal .btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--line-strong);color:var(--bg);padding:10px 16px;border-radius:12px;opacity:0;transition:200ms;pointer-events:none;z-index:60}
+.toast.on{opacity:1;transform:translateX(-50%)}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:70}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Sudoku</h1>
+    <div class="row" style="justify-content:flex-end">
+      <select id="diff" aria-label="Difficulty">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+        <option value="expert">Expert</option>
+      </select>
+      <button class="icon-btn" id="pauseBtn" aria-label="Pause">⏸</button>
+      <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode">🌙</button>
+    </div>
+  </header>
+
+  <div class="stats" aria-live="polite">
+    <span>⏱ <b id="timer">00:00</b></span>
+    <span>Mistakes: <b id="mist">0/3</b></span>
+    <span>Best: <b id="best">--:--</b></span>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+    <div class="pause-overlay" id="pauseOverlay"><button class="btn" id="resumeBtn">▶ Resume</button></div>
+  </div>
+
+  <div class="actions">
+    <button class="act" id="undoBtn"><span class="ic">↩</span>Undo</button>
+    <button class="act" id="redoBtn"><span class="ic">↪</span>Redo</button>
+    <button class="act" id="eraseBtn"><span class="ic">⌫</span>Erase</button>
+    <button class="act" id="notesBtn" aria-pressed="false"><span class="ic">✏️</span><span id="notesLbl">Notes: Off</span></button>
+    <button class="act" id="hintBtn"><span class="ic">💡</span><span id="hintLbl">Hint (3)</span></button>
+  </div>
+
+  <div class="numpad" id="numpad"></div>
+
+  <footer><button class="btn ghost" id="newBtn">New game</button></footer>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" role="dialog" aria-modal="true" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+<canvas id="confetti"></canvas>
+
+<script>
+/*LOGIC_START*/
+const DIFF = {
+  easy:{label:'Easy',givens:40},
+  medium:{label:'Medium',givens:34},
+  hard:{label:'Hard',givens:28},
+  expert:{label:'Expert',givens:24}
+};
+const PEERS = (function(){
+  const p = [];
+  for (let i = 0; i < 81; i++) {
+    const r = Math.floor(i / 9), c = i % 9, s = new Set();
+    for (let k = 0; k < 9; k++) { s.add(r * 9 + k); s.add(k * 9 + c); }
+    const br = r - r % 3, bc = c - c % 3;
+    for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) s.add((br + a) * 9 + bc + b);
+    s.delete(i);
+    p.push([...s]);
+  }
+  return p;
+})();
+function shuffle(a){
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function candMask(g, i){
+  let used = 0;
+  const p = PEERS[i];
+  for (let k = 0; k < p.length; k++) used |= 1 << g[p[k]];
+  return ~used & 0x3FE;
+}
+function popcount(x){ let n = 0; while (x) { n += x & 1; x >>= 1; } return n; }
+function pickCell(g){
+  let best = -1, bestMask = 0, bestN = 10;
+  for (let i = 0; i < 81; i++) {
+    if (g[i] !== 0) continue;
+    const m = candMask(g, i), n = popcount(m);
+    if (n < bestN) { best = i; bestMask = m; bestN = n; if (n <= 1) break; }
+  }
+  return { best, bestMask, bestN };
+}
+// Counts solutions, stops as soon as `limit` is reached.
+function countSolutions(g, limit){
+  const { best, bestMask, bestN } = pickCell(g);
+  if (best < 0) return 1;
+  if (bestN === 0) return 0;
+  let total = 0;
+  for (let d = 1; d <= 9; d++) {
+    if (bestMask & (1 << d)) {
+      g[best] = d;
+      total += countSolutions(g, limit - total);
+      g[best] = 0;
+      if (total >= limit) break;
+    }
+  }
+  return total;
+}
+function fillGrid(g){
+  const { best, bestMask, bestN } = pickCell(g);
+  if (best < 0) return true;
+  if (bestN === 0) return false;
+  const digits = shuffle([1,2,3,4,5,6,7,8,9].filter(d => bestMask & (1 << d)));
+  for (const d of digits) {
+    g[best] = d;
+    if (fillGrid(g)) return true;
+    g[best] = 0;
+  }
+  return false;
+}
+function makePuzzle(targetGivens){
+  const sol = new Array(81).fill(0);
+  fillGrid(sol);
+  const puzzle = sol.slice();
+  let givens = 81;
+  for (const i of shuffle([...Array(81).keys()])) {
+    if (givens <= targetGivens) break;
+    const keep = puzzle[i];
+    puzzle[i] = 0;
+    if (countSolutions(puzzle.slice(), 2) !== 1) puzzle[i] = keep; else givens--;
+  }
+  return { sol, puzzle };
+}
+/*LOGIC_END*/
+
+/* ---------- State ---------- */
+const SAVE_KEY = 'sudoku-save-v1', BEST_KEY = 'sudoku-best-v1', THEME_KEY = 'sudoku-theme-v1';
+let S = null;
+const ui = { sel: -1, notesMode: false, paused: false, undo: [], redo: [] };
+let bests = {};
+
+const $ = id => document.getElementById(id);
+const boardEl = $('board');
+const cells = [];
+
+function store(get, key, val){
+  try { if (get) return JSON.parse(localStorage.getItem(key)); localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  return null;
+}
+
+/* ---------- Build UI ---------- */
+(function build(){
+  for (let i = 0; i < 81; i++) {
+    const r = Math.floor(i / 9), c = i % 9;
+    const b = document.createElement('button');
+    b.className = 'cell' + (c % 3 === 2 && c !== 8 ? ' bR' : '') + (r % 3 === 2 && r !== 8 ? ' bB' : '') + (c === 8 ? ' last-c' : '') + (r === 8 ? ' last-r' : '');
+    b.setAttribute('role', 'gridcell');
+    b.dataset.i = i;
+    b.addEventListener('click', () => select(i));
+    boardEl.appendChild(b);
+    cells.push(b);
+  }
+  const np = $('numpad');
+  for (let d = 1; d <= 9; d++) {
+    const b = document.createElement('button');
+    b.className = 'num';
+    b.id = 'num' + d;
+    b.setAttribute('aria-label', 'Number ' + d);
+    b.innerHTML = d + '<small></small>';
+    b.addEventListener('click', () => enterDigit(d));
+    np.appendChild(b);
+  }
+})();
+
+/* ---------- Game flow ---------- */
+function newGame(diff){
+  const { sol, puzzle } = makePuzzle(DIFF[diff].givens);
+  S = {
+    diff, sol, given: puzzle.map(v => v !== 0), val: puzzle.slice(), notes: new Array(81).fill(0),
+    mistakes: 0, hints: 0, secs: 0, over: false, won: false
+  };
+  resetUi();
+  $('diff').value = diff;
+  save(); render();
+}
+function restartSame(){
+  S.val = S.val.map((v, i) => S.given[i] ? v : 0);
+  S.notes.fill(0); S.mistakes = 0; S.hints = 0; S.secs = 0; S.over = false; S.won = false;
+  resetUi(); save(); render();
+}
+function resetUi(){
+  ui.sel = -1; ui.undo = []; ui.redo = []; ui.paused = false;
+}
+function startNew(diff){
+  toast('Generating puzzle…');
+  setTimeout(() => newGame(diff), 30);
+}
+function save(){ store(false, SAVE_KEY, S); }
+
+/* ---------- Rendering ---------- */
+function fmt(s){ const m = Math.floor(s / 60), r = s % 60; return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0'); }
+function render(){
+  const sel = ui.sel, sv = sel >= 0 ? S.val[sel] : 0;
+  const peers = sel >= 0 ? new Set(PEERS[sel]) : null;
+  for (let i = 0; i < 81; i++) {
+    const el = cells[i], v = S.val[i];
+    let cls = el.className.replace(/\b(given|hl|same|sel|wrong)\b/g, '').replace(/\s+/g, ' ').trim();
+    if (S.given[i]) cls += ' given';
+    if (v && v !== S.sol[i]) cls += ' wrong';
+    if (i === sel) cls += ' sel';
+    else if (sv && v === sv) cls += ' same';
+    else if (peers && peers.has(i)) cls += ' hl';
+    el.className = cls;
+    if (v) el.textContent = v;
+    else if (S.notes[i]) {
+      let h = '<div class="notes">';
+      for (let d = 1; d <= 9; d++) h += '<span>' + (S.notes[i] & (1 << d) ? d : '') + '</span>';
+      el.innerHTML = h + '</div>';
+    } else el.textContent = '';
+    const r = Math.floor(i / 9) + 1, c = i % 9 + 1;
+    el.setAttribute('aria-label', 'Row ' + r + ' column ' + c + ', ' + (v ? 'number ' + v + (S.given[i] ? ', given' : '') : 'empty'));
+  }
+  for (let d = 1; d <= 9; d++) {
+    let n = 0;
+    for (let i = 0; i < 81; i++) if (S.val[i] === d && S.sol[i] === d) n++;
+    const b = $('num' + d);
+    b.querySelector('small').textContent = 9 - n;
+    b.disabled = n >= 9 || S.over || S.won;
+  }
+  $('mist').textContent = S.mistakes + '/3';
+  $('timer').textContent = fmt(S.secs);
+  $('best').textContent = bests[S.diff] != null ? fmt(bests[S.diff]) : '--:--';
+  $('hintLbl').textContent = 'Hint (' + (3 - S.hints) + ')';
+  $('hintBtn').disabled = S.hints >= 3 || S.over || S.won;
+  $('undoBtn').disabled = !ui.undo.length;
+  $('redoBtn').disabled = !ui.redo.length;
+  $('notesBtn').setAttribute('aria-pressed', ui.notesMode);
+  $('notesLbl').textContent = 'Notes: ' + (ui.notesMode ? 'On' : 'Off');
+  boardEl.classList.toggle('hidden', ui.paused);
+  $('pauseOverlay').classList.toggle('on', ui.paused);
+  $('pauseBtn').textContent = ui.paused ? '▶' : '⏸';
+}
+
+/* ---------- Input ---------- */
+function select(i){ if (ui.paused) return; ui.sel = i; render(); }
+function canEdit(){ return S && !S.over && !S.won && !ui.paused; }
+
+function applyChanges(changes){
+  if (!changes.length) return;
+  ui.undo.push(changes); ui.redo = [];
+}
+
+function enterDigit(d){
+  if (!canEdit() || ui.sel < 0) { if (canEdit()) toast('Select a cell first'); return; }
+  const i = ui.sel;
+  if (S.given[i]) return;
+  const changes = [];
+  const old = { i, v0: S.val[i], n0: S.notes[i] };
+  if (ui.notesMode) {
+    if (S.val[i]) return;
+    S.notes[i] ^= (1 << d);
+    changes.push({ ...old, v1: S.val[i], n1: S.notes[i] });
+  } else {
+    if (S.val[i] === d) return;
+    S.val[i] = d; S.notes[i] = 0;
+    changes.push({ ...old, v1: d, n1: 0 });
+    for (const p of PEERS[i]) {
+      if (!S.val[p] && (S.notes[p] & (1 << d))) {
+        const o = { i: p, v0: S.val[p], n0: S.notes[p] };
+        S.notes[p] &= ~(1 << d);
+        changes.push({ ...o, v1: S.val[p], n1: S.notes[p] });
+      }
+    }
+    if (d !== S.sol[i]) {
+      S.mistakes++;
+      if (S.mistakes >= 3) { S.over = true; applyChanges(changes); save(); render(); return gameOver(); }
+    }
+  }
+  applyChanges(changes);
+  save(); render();
+  checkWin();
+}
+
+function erase(){
+  if (!canEdit() || ui.sel < 0) return;
+  const i = ui.sel;
+  if (S.given[i] || (!S.val[i] && !S.notes[i])) return;
+  applyChanges([{ i, v0: S.val[i], n0: S.notes[i], v1: 0, n1: 0 }]);
+  S.val[i] = 0; S.notes[i] = 0;
+  save(); render();
+}
+
+function undo(){
+  if (!canEdit() || !ui.undo.length) return;
+  const ch = ui.undo.pop();
+  for (const c of ch) { S.val[c.i] = c.v0; S.notes[c.i] = c.n0; }
+  ui.redo.push(ch); save(); render();
+}
+function redo(){
+  if (!canEdit() || !ui.redo.length) return;
+  const ch = ui.redo.pop();
+  for (const c of ch) { S.val[c.i] = c.v1; S.notes[c.i] = c.n1; }
+  ui.undo.push(ch); save(); render(); checkWin();
+}
+
+function hint(){
+  if (!canEdit()) return;
+  if (S.hints >= 3) return toast('No hints left');
+  let i = ui.sel;
+  if (i < 0 || S.given[i] || S.val[i] === S.sol[i]) return toast('Select an empty or wrong cell');
+  const changes = [{ i, v0: S.val[i], n0: S.notes[i], v1: S.sol[i], n1: 0 }];
+  S.val[i] = S.sol[i]; S.notes[i] = 0; S.hints++;
+  for (const p of PEERS[i]) {
+    if (!S.val[p] && (S.notes[p] & (1 << S.sol[i]))) {
+      const o = { i: p, v0: S.val[p], n0: S.notes[p] };
+      S.notes[p] &= ~(1 << S.sol[i]);
+      changes.push({ ...o, v1: S.val[p], n1: S.notes[p] });
+    }
+  }
+  applyChanges(changes);
+  save(); render(); checkWin();
+}
+
+function move(dr, dc){
+  if (!canEdit()) return;
+  if (ui.sel < 0) ui.sel = 40;
+  else {
+    const r = Math.max(0, Math.min(8, Math.floor(ui.sel / 9) + dr));
+    const c = Math.max(0, Math.min(8, ui.sel % 9 + dc));
+    ui.sel = r * 9 + c;
+  }
+  render(); cells[ui.sel].focus();
+}
+
+/* ---------- Win / lose ---------- */
+function checkWin(){
+  for (let i = 0; i < 81; i++) if (S.val[i] !== S.sol[i]) return;
+  S.won = true;
+  const newBest = bests[S.diff] == null || S.secs < bests[S.diff];
+  if (newBest) { bests[S.diff] = S.secs; store(false, BEST_KEY, bests); }
+  save(); render(); confetti();
+  const summary = 'I solved a ' + DIFF[S.diff].label + ' Sudoku in ' + fmt(S.secs) + ' with ' + S.mistakes + ' mistakes and ' + S.hints + ' hints!';
+  showModal('🎉 You solved it!',
+    '<p>Difficulty: <b>' + DIFF[S.diff].label + '</b></p><p>Time: <b>' + fmt(S.secs) + '</b>' + (newBest ? ' — new best!' : '') + '</p><p>Mistakes: <b>' + S.mistakes + '</b> · Hints used: <b>' + S.hints + '</b></p>',
+    [{ label: 'Share result', ghost: true, keep: true, fn: () => share(summary) }, { label: 'New game', fn: () => startNew(S.diff) }]);
+}
+function share(text){
+  const done = () => toast('Result copied!');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text));
+  else fallbackCopy(text);
+}
+function fallbackCopy(text){
+  const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select();
+  try { document.execCommand('copy'); toast('Result copied!'); } catch (e) { toast('Copy not supported'); }
+  t.remove();
+}
+function gameOver(){
+  showModal('Game over', '<p>You made 3 mistakes.</p>',
+    [{ label: 'Try again', ghost: true, fn: restartSame }, { label: 'New game', fn: () => startNew(S.diff) }]);
+}
+
+/* ---------- Modal / toast ---------- */
+function showModal(title, html, buttons){
+  const m = $('modal');
+  m.innerHTML = '<h2>' + title + '</h2>' + html + '<div class="btns"></div>';
+  const wrap = m.querySelector('.btns');
+  buttons.forEach(b => {
+    const el = document.createElement('button');
+    el.className = 'btn' + (b.ghost ? ' ghost' : '');
+    el.textContent = b.label;
+    el.addEventListener('click', () => { if (!b.keep) closeModal(); b.fn(); });
+    wrap.appendChild(el);
+  });
+  $('modalBg').classList.add('on');
+  wrap.firstChild && wrap.lastChild.focus();
+}
+function closeModal(){ $('modalBg').classList.remove('on'); }
+let toastT;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1600);
+}
+
+/* ---------- Confetti (canvas, no libraries) ---------- */
+function confetti(){
+  const cv = $('confetti'), ctx = cv.getContext('2d');
+  cv.width = innerWidth; cv.height = innerHeight;
+  const colors = ['#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899'];
+  const ps = Array.from({ length: 160 }, () => ({
+    x: Math.random() * cv.width, y: -20 - Math.random() * cv.height * .5,
+    vx: (Math.random() - .5) * 4, vy: 2 + Math.random() * 4,
+    s: 5 + Math.random() * 6, r: Math.random() * 6, vr: (Math.random() - .5) * .3,
+    c: colors[Math.floor(Math.random() * colors.length)]
+  }));
+  const end = performance.now() + 3500;
+  (function frame(now){
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ps.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.r += p.vr; p.vy += .03;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * .6); ctx.restore();
+    });
+    if (now < end) requestAnimationFrame(frame); else ctx.clearRect(0, 0, cv.width, cv.height);
+  })(performance.now());
+}
+
+/* ---------- Timer / pause ---------- */
+setInterval(() => {
+  if (!S || ui.paused || S.over || S.won || $('modalBg').classList.contains('on')) return;
+  S.secs++; $('timer').textContent = fmt(S.secs);
+  if (S.secs % 5 === 0) save();
+}, 1000);
+function setPause(p){
+  if (!S || S.over || S.won) return;
+  ui.paused = p; render();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
+
+/* ---------- Theme ---------- */
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  $('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+}
+(function initTheme(){
+  const saved = store(true, THEME_KEY);
+  applyTheme(saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+})();
+$('themeBtn').addEventListener('click', () => {
+  const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(t); store(false, THEME_KEY, t);
+});
+
+/* ---------- Events ---------- */
+$('undoBtn').addEventListener('click', undo);
+$('redoBtn').addEventListener('click', redo);
+$('eraseBtn').addEventListener('click', erase);
+$('hintBtn').addEventListener('click', hint);
+$('notesBtn').addEventListener('click', () => { ui.notesMode = !ui.notesMode; render(); });
+$('pauseBtn').addEventListener('click', () => setPause(!ui.paused));
+$('resumeBtn').addEventListener('click', () => setPause(false));
+$('newBtn').addEventListener('click', () => startNew($('diff').value));
+$('diff').addEventListener('change', () => startNew($('diff').value));
+
+document.addEventListener('keydown', e => {
+  if ($('modalBg').classList.contains('on')) return;
+  if (e.target.tagName === 'SELECT') return;
+  const k = e.key;
+  if (/^[1-9]$/.test(k)) { enterDigit(+k); e.preventDefault(); }
+  else if (k === 'Backspace' || k === 'Delete' || k === '0') { erase(); e.preventDefault(); }
+  else if (k === 'ArrowUp') { move(-1, 0); e.preventDefault(); }
+  else if (k === 'ArrowDown') { move(1, 0); e.preventDefault(); }
+  else if (k === 'ArrowLeft') { move(0, -1); e.preventDefault(); }
+  else if (k === 'ArrowRight') { move(0, 1); e.preventDefault(); }
+  else if (k === 'n' || k === 'N') { ui.notesMode = !ui.notesMode; render(); }
+  else if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { e.shiftKey ? redo() : undo(); e.preventDefault(); }
+  else if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'y') { redo(); e.preventDefault(); }
+});
+
+/* ---------- Init ---------- */
+(function init(){
+  bests = store(true, BEST_KEY) || {};
+  const saved = store(true, SAVE_KEY);
+  const valid = saved && Array.isArray(saved.sol) && saved.sol.length === 81 && !saved.over && !saved.won;
+  if (valid) {
+    S = saved; ui.paused = true; $('diff').value = S.diff; render();
+    showModal('Welcome back', '<p>You have a game in progress (' + DIFF[S.diff].label + ', ' + fmt(S.secs) + ').</p>',
+      [{ label: 'New game', ghost: true, fn: () => startNew($('diff').value) }, { label: 'Continue game', fn: () => setPause(false) }]);
+  } else {
+    newGame($('diff').value);
+  }
+})();
+</script>
+</body>
+</html>
